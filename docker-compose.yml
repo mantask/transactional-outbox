@@ -1,0 +1,59 @@
+version: '3'
+services:
+  postgres:
+    image: postgres:${POSTGRES_VERSION}
+    ports:
+      - 5432:5432
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/0.schema.sql:/docker-entrypoint-initdb.d/0.schema.sql
+    environment:
+      POSTGRES_PASSWORD: changeit
+    command: postgres -c wal_level=logical
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:${KAFKA_VERSION}
+    volumes:
+      - zookeeper_data:/var/lib/zookeeper/data
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      KAFKA_HEAP_OPTS: -Xmx64m
+
+  kafka:
+    image: confluentinc/cp-kafka:${KAFKA_VERSION}
+    ports:
+      - 9092:9092
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    environment:
+      KAFKA_LISTENERS: LC://kafka:29092,LX://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: LC://kafka:29092,LX://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: LC:PLAINTEXT,LX:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: LC
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_HEAP_OPTS: -Xmx192m
+    depends_on:
+      - zookeeper
+
+  debezium-connect:
+    image: debezium/connect:${DEBEZIUM_VERSION}
+    ports:
+      - 8083:8083
+    environment:
+      GROUP_ID: 1
+      CONFIG_STORAGE_TOPIC: debezium_connect_config
+      OFFSET_STORAGE_TOPIC: debezium_connect_offsets
+      STATUS_STORAGE_TOPIC: debezium_connect_status
+      BOOTSTRAP_SERVERS: kafka:29092
+    depends_on:
+      - kafka
+      - postgres
+
+volumes:
+  postgres_data:
+    driver: local
+  zookeeper_data:
+    driver: local
+  kafka_data:
+    driver: local
